@@ -2,6 +2,7 @@ cmake_minimum_required(VERSION 3.16)
 
 project(TRUSMiddleGateway VERSION 0.1 LANGUAGES CXX)
 
+set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 find_package(Qt6 REQUIRED COMPONENTS Quick)
@@ -23,6 +24,8 @@ qt_add_qml_module(appTRUSMiddleGateway
     QML_FILES
         Main.qml
         SOURCES telnetreader.h telnetreader.cpp
+        SOURCES datamodels.h datamodels.cpp
+        SOURCES marketinfoparser.h marketinfoparser.cpp
 )
 
 # Qt for iOS sets MACOSX_BUNDLE_GUI_IDENTIFIER automatically since Qt 6.1.
