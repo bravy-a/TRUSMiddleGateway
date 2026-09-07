@@ -3,9 +3,15 @@
 #include <cstddef>
 #include <cstdint>
 #include <QString>
+#include <chrono>
 
 constexpr std::size_t maxStockCodeLength = 10;
 constexpr std::size_t maxMarketCodeLength = 2;
+
+template <typename T>
+concept GenericInteger = std::integral<T> && !std::same_as<T, bool>; // All unsigned int types but exclude bool.
+
+using sys_datetime = std::chrono::time_point<std::chrono::system_clock>;
 
 enum class InstrumentType {
     ORDI,           // Ordinary Stock
@@ -27,24 +33,10 @@ enum class MarketCode {
     TN
 };
 
-[[nodiscard]] constexpr std::string_view toString(MarketCode code) {
-    switch (code) {
-        case MarketCode::RG: return "RG";
-        case MarketCode::NG: return "NG";
-        case MarketCode::TN: return "TN";
-    }
-
-    return {};
-}
-
-[[nodiscard]] MarketCode toMarketCode(const QString& code)
-{
-    if (code == "RG") return MarketCode::RG;
-    if (code == "NG") return MarketCode::NG;
-    if (code == "TN") return MarketCode::TN;
-
-    throw std::invalid_argument("Invalid market code");
-}
+// Helper
+[[nodiscard]] constexpr std::string_view toString(MarketCode code);
+[[nodiscard]] MarketCode toMarketCode(const QString& code);
+[[nodiscard]] InstrumentType toInstrumentType(const QString& code);
 
 struct OrderLeg {
     std::uint64_t volume;
@@ -112,15 +104,14 @@ struct InitialStockInfo
     StockOrderBook stockOrderBook;
     StockTradeBook stockTradeBook;
 
-    double priceDecimal;
-    double sharesPerLot;
-
     std::uint64_t totalFrequency;
     std::uint64_t totalVolume;
     std::uint64_t totalValue;
     std::uint64_t IEV;
     std::uint64_t IEVClosing;
 
+    std::uint32_t priceDecimal;
+    std::uint32_t sharesPerLot;
     std::uint32_t previousPrice;
     std::uint32_t openPrice;
     std::uint32_t highPrice;
@@ -133,4 +124,14 @@ struct InitialStockInfo
     InstrumentType instrumentType;
 };
 
-using ParsedDataTypes = std::variant<StockOrderBook, StockTradeBook, InitialStockInfo>;
+struct Trade {
+    Trade();
+
+    QString stockCode;
+    std::uint32_t volume;
+    std::uint32_t price;
+    sys_datetime tradeTime;
+    MarketCode marketCode;
+};
+
+using ParsedDataTypes = std::variant<StockOrderBook, StockTradeBook, InitialStockInfo, Trade>;

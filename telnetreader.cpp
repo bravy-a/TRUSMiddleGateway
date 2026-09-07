@@ -170,6 +170,8 @@ void TelnetReader::processApplicationByte (char byte) {
 
     m_lineBuffer.append(byte);
 };
+
+
 void TelnetReader::rejectTelnetOption(unsigned char command, unsigned char option) {
     unsigned char response;
 

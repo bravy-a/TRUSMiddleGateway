@@ -3,23 +3,17 @@
 #include "datamodels.h"
 #include <QObject>
 #include <charconv>
-#include <concepts>
 
-
-template <typename T>
-concept GenericInteger = std::integral<T> && !std::same_as<T, bool>; // All unsigned int types but exclude bool.
 
 class MarketInfoParser : public QObject
 {
     Q_OBJECT
 public:
-    MarketInfoParser(QObject *parent = nullptr);
+    MarketInfoParser(std::chrono::year_month_day date, QObject *parent = nullptr);
 
     ParsedDataTypes ParseMessage(const QByteArray& msg);
 
 private:
-    static QByteArrayView NextField(QByteArrayView msg, qsizetype& cursor);
-
     template <GenericInteger I>
     static I ParseInteger(QByteArrayView field)
     {
@@ -33,10 +27,15 @@ private:
     }
 
     // Helper lambda to iterate over "|" symbols
-    const QByteArrayView NextField(QByteArrayView& view, qsizetype& cursor);
+    const QByteArrayView NextField(QByteArrayView view, qsizetype& cursor);
+    [[nodiscard]] sys_datetime ParseTimestamp (const std::chrono::year_month_day tradingDate, const QByteArrayView field);
 
     StockOrderBook ParseStockOrderBook(const QByteArray& msg);
     StockTradeBook ParseStockTradeBook(const QByteArray& msg);
     InitialStockInfo ParseInitialStockInfo(const QByteArray& msg);
+    Trade ParseTrade(const std::chrono::year_month_day date, const QByteArray& msg);
+
+    // Helper attributes
+    std::chrono::year_month_day m_date; // Used to indicate the current trade date for the timestamp.
 
 };
