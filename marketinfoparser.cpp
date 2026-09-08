@@ -2,9 +2,10 @@
 #include <QByteArray>
 #include <QByteArrayView>
 #include <QString>
-
 #include <cstdint>
+#include <QDebug>
 #include <stdexcept>
+
 
 MarketInfoParser::MarketInfoParser(std::chrono::year_month_day date, QObject *parent)
     :m_date(date), QObject(parent)
@@ -12,6 +13,7 @@ MarketInfoParser::MarketInfoParser(std::chrono::year_month_day date, QObject *pa
 
 ParsedDataTypes MarketInfoParser::ParseMessage(const QByteArray& msg) {
     switch (msg.at(0)) {
+    // Actual data
     case 'v':
         return ParseStockOrderBook(msg);
     case 'x':
@@ -20,9 +22,20 @@ ParsedDataTypes MarketInfoParser::ParseMessage(const QByteArray& msg) {
         return ParseInitialStockInfo(msg);
     case 't':
         return ParseTrade(m_date, msg);
+    case 'e':
+        return ParseIndicativeEquilibriumOpeningData(msg);
+    case 'f':
+        return ParseIndicativeEquilibriumClosingData(msg);
+
+    // Utilities (TO DO: Implement)
+    case 'R':
+        qInfo() << "LOGIN MESSAGE DETECTED!" + msg;
+        return Trade{}; // TO DO
+    case 'S':
+        qInfo() << "HEARTBEAT DETECTED!" + msg;
+        return Trade{}; // TO DO
     default:
-        return Trade{};
-       // std::terminate(); // Change this later
+        throw std::invalid_argument("cannot parse this message" + msg); // Change this later
     }
 }
 
@@ -204,4 +217,42 @@ Trade MarketInfoParser::ParseTrade(const std::chrono::year_month_day date, const
     if (cursor != view.size()) throw std::invalid_argument("Unexpected fields after Trade");
 
     return trade;
+}
+
+IndicativeEquilibriumData MarketInfoParser::ParseIndicativeEquilibriumOpeningData(const QByteArray& msg) {
+    IndicativeEquilibriumData IEData {};
+    const QByteArrayView view {msg};
+    qsizetype cursor {0};
+
+    const QByteArrayView messageType {NextField(view, cursor)};
+    if ((messageType.size() != 1) || (messageType[0] != 'e'))
+        throw std::invalid_argument("Invalid Trade message type");
+
+    IEData.stockCode = QString::fromLatin1(NextField(view, cursor));
+    IEData.marketCode = toMarketCode(QString::fromLatin1(NextField(view, cursor)));
+    IEData.IEP = ParseInteger<std::uint32_t>(NextField(view, cursor));
+    IEData.IEV = ParseInteger<std::uint64_t>(NextField(view, cursor));
+
+    if (cursor != view.size()) throw std::invalid_argument("Unexpected fieds after indicative equilibrium data");
+
+    return IEData;
+}
+
+IndicativeEquilibriumData MarketInfoParser::ParseIndicativeEquilibriumClosingData(const QByteArray& msg) {
+    IndicativeEquilibriumData IEData {};
+    const QByteArrayView view {msg};
+    qsizetype cursor {0};
+
+    const QByteArrayView messageType {NextField(view, cursor)};
+    if ((messageType.size() != 1) || (messageType[0] != 'f'))
+        throw std::invalid_argument("Invalid Trade message type");
+
+    IEData.stockCode = QString::fromLatin1(NextField(view, cursor));
+    IEData.marketCode = toMarketCode(QString::fromLatin1(NextField(view, cursor)));
+    IEData.IEP = ParseInteger<std::uint32_t>(NextField(view, cursor));
+    IEData.IEV = ParseInteger<std::uint64_t>(NextField(view, cursor));
+
+    if (cursor != view.size()) throw std::invalid_argument("Unexpected fieds after indicative equilibrium data");
+
+    return IEData;
 }

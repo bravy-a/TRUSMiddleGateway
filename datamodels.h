@@ -134,4 +134,13 @@ struct Trade {
     MarketCode marketCode;
 };
 
-using ParsedDataTypes = std::variant<StockOrderBook, StockTradeBook, InitialStockInfo, Trade>;
+struct IndicativeEquilibriumData {
+    IndicativeEquilibriumData();
+
+    QString stockCode;
+    std::uint64_t IEV;
+    std::uint32_t IEP;
+    MarketCode marketCode;
+};
+
+using ParsedDataTypes = std::variant<StockOrderBook, StockTradeBook, InitialStockInfo, Trade, IndicativeEquilibriumData>;

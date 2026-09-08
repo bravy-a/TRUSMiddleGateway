@@ -34,6 +34,8 @@ private:
     StockTradeBook ParseStockTradeBook(const QByteArray& msg);
     InitialStockInfo ParseInitialStockInfo(const QByteArray& msg);
     Trade ParseTrade(const std::chrono::year_month_day date, const QByteArray& msg);
+    IndicativeEquilibriumData ParseIndicativeEquilibriumOpeningData(const QByteArray& msg);
+    IndicativeEquilibriumData ParseIndicativeEquilibriumClosingData(const QByteArray& msg);
 
     // Helper attributes
     std::chrono::year_month_day m_date; // Used to indicate the current trade date for the timestamp.

@@ -100,3 +100,8 @@ InitialStockInfo::InitialStockInfo () {
 Trade::Trade () {
     stockCode.reserve(maxStockCodeLength);
 }
+
+// Indicative Equilibrium Data
+IndicativeEquilibriumData::IndicativeEquilibriumData () {
+    stockCode.reserve(maxStockCodeLength);
+}

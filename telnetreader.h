@@ -2,6 +2,7 @@
 
 #include <QObject>
 #include <QTcpSocket>
+#include <functional>
 
 namespace TelnetCode {
 constexpr unsigned char SE {240};
@@ -26,8 +27,8 @@ class TelnetReader : public QObject
 {
     Q_OBJECT
 public:
-    explicit TelnetReader(QString hostName, quint16 port, QObject *parent = nullptr);
-
+    explicit TelnetReader(QString hostName, quint16 port, std::function<void(TelnetReader&)> destructSequence = {}, QObject *parent = nullptr);
+    ~TelnetReader();
     void connectToHost();
     void disconnectFromHost();
 
@@ -61,7 +62,6 @@ private:
     void rejectTelnetOption(unsigned char command, unsigned char option);
 
     QString m_hostName;
-    QString m_hostPassword;
     quint16 m_port;
 
     QTcpSocket m_socket;
@@ -72,4 +72,6 @@ private:
     unsigned char m_telnetCommand = 0;
 
     bool m_pendingCR = false;
+    bool m_manualDisconnect = false;
+    std::function<void(TelnetReader&)> m_destructSequence;
 };

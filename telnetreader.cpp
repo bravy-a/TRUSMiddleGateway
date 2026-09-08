@@ -1,9 +1,13 @@
 #include "telnetreader.h"
 #include <QObject>
 #include <QTcpSocket>
+#include <functional>
+#include <QTimer>
 
-TelnetReader::TelnetReader(QString hostName, quint16 port, QObject *parent)
-    : QObject(parent), m_hostName(hostName), m_port(port) {
+using namespace std::chrono_literals;
+
+TelnetReader::TelnetReader(QString hostName, quint16 port, std::function<void(TelnetReader&)> destructSequence, QObject *parent)
+    : QObject(parent), m_hostName(std::move(hostName)), m_port(port), m_destructSequence(std::move(destructSequence)) {
     QObject::connect(
         &m_socket,
         &QTcpSocket::connected,
@@ -15,8 +19,13 @@ TelnetReader::TelnetReader(QString hostName, quint16 port, QObject *parent)
         &m_socket,
         &QTcpSocket::disconnected,
         this,
-        &TelnetReader::disconnected
-    );
+        [this]
+        {
+            emit disconnected();
+
+            if (!m_manualDisconnect)
+                QTimer::singleShot(1s, this, &TelnetReader::connectToHost);
+        });
 
     QObject::connect(
         &m_socket,
@@ -33,6 +42,10 @@ TelnetReader::TelnetReader(QString hostName, quint16 port, QObject *parent)
     );
 };
 
+TelnetReader::~TelnetReader() {
+    if (m_destructSequence) m_destructSequence(*this);
+}
+
 // PUBLIC
 void TelnetReader::connectToHost() {
     if (m_socket.state() != QAbstractSocket::UnconnectedState) return;
@@ -41,6 +54,7 @@ void TelnetReader::connectToHost() {
 
     m_telnetState = TelnetState::Data;
     m_telnetCommand = 0;
+    m_manualDisconnect = false;
     m_pendingCR = false;
 
     m_socket.connectToHost(m_hostName, m_port);
@@ -49,6 +63,7 @@ void TelnetReader::connectToHost() {
 void TelnetReader::disconnectFromHost() {
     if (m_socket.state() == QAbstractSocket::UnconnectedState) return;
 
+    m_manualDisconnect = true;
     m_socket.disconnectFromHost();
 }
 
