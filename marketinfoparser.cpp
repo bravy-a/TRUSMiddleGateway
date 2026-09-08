@@ -5,6 +5,7 @@
 #include <cstdint>
 #include <QDebug>
 #include <stdexcept>
+#include <chrono>
 
 
 MarketInfoParser::MarketInfoParser(std::chrono::year_month_day date, QObject *parent)
@@ -49,7 +50,8 @@ const QByteArrayView MarketInfoParser::NextField(QByteArrayView view, qsizetype&
     return field;
 };
 
-sys_datetime MarketInfoParser::ParseTimestamp (const std::chrono::year_month_day tradingDate, const QByteArrayView field) {
+sys_datetime MarketInfoParser::ParseTimestamp(const std::chrono::year_month_day tradingDate, const QByteArrayView field)
+{
     if (field.size() != 6) throw std::invalid_argument("Invalid HHMMSS field.");
 
     const auto hour = ParseInteger<std::uint16_t>(field.sliced(0, 2));
@@ -58,7 +60,8 @@ sys_datetime MarketInfoParser::ParseTimestamp (const std::chrono::year_month_day
 
     if (hour >= 24 || minute >= 60 || second >= 60) throw std::invalid_argument("Invalid HHMMSS time");
 
-    return std::chrono::sys_days {tradingDate} + std::chrono::hours {hour} + std::chrono::minutes {minute} + std::chrono::seconds {second};
+    const std::chrono::local_seconds localTime = std::chrono::local_days {tradingDate} + std::chrono::hours {hour} + std::chrono::minutes {minute} + std::chrono::seconds {second};
+    return std::chrono::locate_zone("Asia/Jakarta")->to_sys(localTime);
 }
 
 StockOrderBook MarketInfoParser::ParseStockOrderBook(const QByteArray& msg)

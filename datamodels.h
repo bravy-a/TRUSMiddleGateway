@@ -41,12 +41,16 @@ enum class MarketCode {
 struct OrderLeg {
     std::uint64_t volume;
     std::uint32_t price;
+
+    [[nodiscard]] QString toString() const;
 };
 
 struct TradeLeg {
     std::uint64_t volume;
     std::uint64_t frequency;
     std::uint32_t price;
+
+    [[nodiscard]] QString toString() const;
 };
 
 struct StockData
@@ -84,6 +88,8 @@ struct StockOrderBook {
     std::vector<OrderLeg> bidLegs;
     std::uint32_t askLegAmount;
     std::vector<OrderLeg> askLegs;
+
+    [[nodiscard]] QString toString() const;
 };
 
 struct StockTradeBook {
@@ -93,6 +99,8 @@ struct StockTradeBook {
     MarketCode marketCode;
     std::uint32_t tradeLegAmount;
     std::vector<TradeLeg> tradeLegs;
+
+    [[nodiscard]] QString toString() const;
 };
 
 struct InitialStockInfo
@@ -122,6 +130,8 @@ struct InitialStockInfo
 
     MarketCode marketCode;
     InstrumentType instrumentType;
+
+    [[nodiscard]] QString toString() const;
 };
 
 struct Trade {
@@ -132,6 +142,8 @@ struct Trade {
     std::uint32_t price;
     sys_datetime tradeTime;
     MarketCode marketCode;
+
+    [[nodiscard]] QString toString() const;
 };
 
 struct IndicativeEquilibriumData {
@@ -141,6 +153,8 @@ struct IndicativeEquilibriumData {
     std::uint64_t IEV;
     std::uint32_t IEP;
     MarketCode marketCode;
+
+    [[nodiscard]] QString toString() const;
 };
 
 using ParsedDataTypes = std::variant<StockOrderBook, StockTradeBook, InitialStockInfo, Trade, IndicativeEquilibriumData>;
