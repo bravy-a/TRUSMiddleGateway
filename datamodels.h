@@ -4,6 +4,7 @@
 #include <cstdint>
 #include <QString>
 #include <chrono>
+#include <QDateTime>
 
 constexpr std::size_t maxStockCodeLength = 10;
 constexpr std::size_t maxMarketCodeLength = 2;
@@ -155,6 +156,46 @@ struct IndicativeEquilibriumData {
     MarketCode marketCode;
 
     [[nodiscard]] QString toString() const;
+};
+
+struct PriceDataRow {
+    QString stockCode;
+    QString stockName;
+    QString status;
+    QString spNotation;
+    QDateTime updateTime;
+
+    double changePercentage;
+
+    std::uint64_t bidVolume;
+    std::uint64_t offerVolume;
+    std::uint64_t totalFrequency;
+    std::uint64_t totalVolume;
+    std::uint64_t totalValue;
+    std::uint64_t totalAllFreq;
+    std::uint64_t totalAllVolume;
+    std::uint64_t totalAllValue;
+
+    std::uint32_t previousPrice;
+    std::uint32_t openPrice;
+    std::uint32_t highestPrice;
+    std::uint32_t lowestPrice;
+    std::uint32_t lastPrice;
+    std::uint32_t lastVolume;
+    std::int32_t change;
+    std::uint32_t bid;
+    std::uint32_t offer;
+
+    std::uint32_t IEPriceOp;
+    std::uint32_t IEVolOp;
+    std::uint32_t IEPriceCl;
+    std::uint32_t IEVolCl;
+    std::uint32_t IEPriceSpMonitoring;
+    std::uint32_t IEVolSpMonitoring;
+    std::uint32_t bBidIEP;
+    std::uint32_t bBidIEV;
+    std::uint32_t bOfferIEP;
+    std::uint32_t bOfferIEV;
 };
 
 using ParsedDataTypes = std::variant<StockOrderBook, StockTradeBook, InitialStockInfo, Trade, IndicativeEquilibriumData>;

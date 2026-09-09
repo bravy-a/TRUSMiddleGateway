@@ -7,6 +7,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 find_package(Qt6 REQUIRED COMPONENTS Quick)
 find_package(Qt6 REQUIRED COMPONENTS Network)
+find_package(Qt6 REQUIRED COMPONENTS Sql)
 
 qt_standard_project_setup(REQUIRES 6.10)
 
@@ -23,9 +24,12 @@ qt_add_qml_module(appTRUSMiddleGateway
     URI TRUSMiddleGateway
     QML_FILES
         Main.qml
-        SOURCES telnetreader.h telnetreader.cpp
-        SOURCES datamodels.h datamodels.cpp
-        SOURCES marketinfoparser.h marketinfoparser.cpp
+    SOURCES
+        telnetreader.h telnetreader.cpp
+        datamodels.h datamodels.cpp
+        marketinfoparser.h marketinfoparser.cpp
+        sql.h sql.cpp
+        SOURCES trusdbworker.h trusdbworker.cpp
 )
 
 # Qt for iOS sets MACOSX_BUNDLE_GUI_IDENTIFIER automatically since Qt 6.1.
@@ -40,7 +44,7 @@ set_target_properties(appTRUSMiddleGateway PROPERTIES
 )
 
 target_link_libraries(appTRUSMiddleGateway
-    PRIVATE Qt6::Quick
+PRIVATE Qt6::Quick Qt6::Network Qt6::Sql
 )
 
 install(TARGETS appTRUSMiddleGateway
