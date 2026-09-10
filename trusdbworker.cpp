@@ -10,28 +10,52 @@ TRUSDBWorker::TRUSDBWorker(DBPayload payload, QString connectionName, QObject* p
 {}
 
 namespace {
-    // Move this later
-    constexpr QStringView PriceDataInsertSql = uR"(
-        INSERT INTO [ED].[dbo].[PRICE_TRUS] (
-            [UpdateTime], [StockCode], [StockName], [Status], [PreviousPrice], [OpenPrice], [HighestPrice], [LowestPrice],
-            [LastPrice], [LastVolume], [Change], [ChangePercentage], [Bid], [BidVolume], [Offer], [OfferVolume],
-            [TotalFrequency], [TotalVolume], [TotalValue], [TotalAllFreq], [TotalAllVolume], [TotalAllValue],
-            [SpNotation], [IEPriceOp], [IEVolOp], [IEPriceCl], [IEVolCl], [IEPriceSpMonitoring], [IEVolSpMonitoring],
-            [BBidIEP], [BBidIEV], [BOfferIEP], [BOfferIEV]
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+constexpr QStringView PriceDataUpsertSql = uR"(
+        MERGE [ED_UAT].[dbo].[PRICE_TRUS] AS t
+        USING (VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?))
+        AS s ([UpdateTime],[StockCode],[StockName],[Status],[PreviousPrice],[OpenPrice],[HighestPrice],[LowestPrice],
+              [LastPrice],[LastVolume],[Change],[ChangePercentage],[Bid],[BidVolume],[Offer],[OfferVolume],
+              [TotalFrequency],[TotalVolume],[TotalValue],[TotalAllFreq],[TotalAllVolume],[TotalAllValue],
+              [SpNotation],[IEPriceOp],[IEVolOp],[IEPriceCl],[IEVolCl],[IEPriceSpMonitoring],[IEVolSpMonitoring],
+              [BBidIEP],[BBidIEV],[BOfferIEP],[BOfferIEV])
+        ON t.[StockCode]=s.[StockCode]
+        WHEN MATCHED THEN UPDATE SET
+            t.[UpdateTime]=s.[UpdateTime], t.[StockName]=s.[StockName], t.[Status]=s.[Status],
+            t.[PreviousPrice]=s.[PreviousPrice], t.[OpenPrice]=s.[OpenPrice], t.[HighestPrice]=s.[HighestPrice],
+            t.[LowestPrice]=s.[LowestPrice], t.[LastPrice]=s.[LastPrice], t.[LastVolume]=s.[LastVolume],
+            t.[Change]=s.[Change], t.[ChangePercentage]=s.[ChangePercentage], t.[Bid]=s.[Bid],
+            t.[BidVolume]=s.[BidVolume], t.[Offer]=s.[Offer], t.[OfferVolume]=s.[OfferVolume],
+            t.[TotalFrequency]=s.[TotalFrequency], t.[TotalVolume]=s.[TotalVolume], t.[TotalValue]=s.[TotalValue],
+            t.[TotalAllFreq]=s.[TotalAllFreq], t.[TotalAllVolume]=s.[TotalAllVolume], t.[TotalAllValue]=s.[TotalAllValue],
+            t.[SpNotation]=s.[SpNotation], t.[IEPriceOp]=s.[IEPriceOp], t.[IEVolOp]=s.[IEVolOp],
+            t.[IEPriceCl]=s.[IEPriceCl], t.[IEVolCl]=s.[IEVolCl],
+            t.[IEPriceSpMonitoring]=s.[IEPriceSpMonitoring], t.[IEVolSpMonitoring]=s.[IEVolSpMonitoring],
+            t.[BBidIEP]=s.[BBidIEP], t.[BBidIEV]=s.[BBidIEV], t.[BOfferIEP]=s.[BOfferIEP], t.[BOfferIEV]=s.[BOfferIEV]
+        WHEN NOT MATCHED THEN INSERT
+            ([UpdateTime],[StockCode],[StockName],[Status],[PreviousPrice],[OpenPrice],[HighestPrice],[LowestPrice],
+             [LastPrice],[LastVolume],[Change],[ChangePercentage],[Bid],[BidVolume],[Offer],[OfferVolume],
+             [TotalFrequency],[TotalVolume],[TotalValue],[TotalAllFreq],[TotalAllVolume],[TotalAllValue],
+             [SpNotation],[IEPriceOp],[IEVolOp],[IEPriceCl],[IEVolCl],[IEPriceSpMonitoring],[IEVolSpMonitoring],
+             [BBidIEP],[BBidIEV],[BOfferIEP],[BOfferIEV])
+        VALUES
+            (s.[UpdateTime],s.[StockCode],s.[StockName],s.[Status],s.[PreviousPrice],s.[OpenPrice],s.[HighestPrice],s.[LowestPrice],
+             s.[LastPrice],s.[LastVolume],s.[Change],s.[ChangePercentage],s.[Bid],s.[BidVolume],s.[Offer],s.[OfferVolume],
+             s.[TotalFrequency],s.[TotalVolume],s.[TotalValue],s.[TotalAllFreq],s.[TotalAllVolume],s.[TotalAllValue],
+             s.[SpNotation],s.[IEPriceOp],s.[IEVolOp],s.[IEPriceCl],s.[IEVolCl],s.[IEPriceSpMonitoring],s.[IEVolSpMonitoring],
+             s.[BBidIEP],s.[BBidIEV],s.[BOfferIEP],s.[BOfferIEV]);
     )";
 
-    qint32 toSqlInt(std::uint32_t value) {
-        if (value > static_cast<std::uint32_t>(std::numeric_limits<qint32>::max()))
-            throw std::overflow_error("Value exceeds SQL Server INT range.");
-        return static_cast<qint32>(value);
-    }
+qint32 toSqlInt(std::uint32_t value) {
+    if (value > static_cast<std::uint32_t>(std::numeric_limits<qint32>::max()))
+        throw std::overflow_error("Value exceeds SQL Server INT range.");
+    return static_cast<qint32>(value);
+}
 
-    qlonglong toSqlBigInt(std::uint64_t value) {
-        if (value > static_cast<std::uint64_t>(std::numeric_limits<qlonglong>::max()))
-            throw std::overflow_error("Value exceeds SQL Server BIGINT range.");
-        return static_cast<qlonglong>(value);
-    }
+qlonglong toSqlBigInt(std::uint64_t value) {
+    if (value > static_cast<std::uint64_t>(std::numeric_limits<qlonglong>::max()))
+        throw std::overflow_error("Value exceeds SQL Server BIGINT range.");
+    return static_cast<qlonglong>(value);
+}
 }
 
 void TRUSDBWorker::initialize() {
@@ -57,7 +81,7 @@ void TRUSDBWorker::uploadPriceData(std::vector<PriceDataRow> rows) {
     try {
         const qsizetype rowCount = static_cast<qsizetype>(rows.size());
 
-        m_db->executePrepared(PriceDataInsertSql, std::span<const PriceDataRow>{rows}, [](QSqlQuery& query, const PriceDataRow& row) {
+        m_db->executePrepared(PriceDataUpsertSql, std::span<const PriceDataRow>{rows}, [](QSqlQuery& query, const PriceDataRow& row) {
             query.bindValue(0, row.updateTime);
             query.bindValue(1, row.stockCode);
             query.bindValue(2, row.stockName);

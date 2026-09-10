@@ -101,7 +101,7 @@ StockOrderBook MarketInfoParser::ParseStockOrderBook(const QByteArray& msg)
 }
 
 StockTradeBook MarketInfoParser::ParseStockTradeBook(const QByteArray& msg) {
-    StockTradeBook stockTradeBook{};
+    StockTradeBook stockTradeBook {};
     const QByteArrayView view {msg};
     qsizetype cursor {0};
 
@@ -116,6 +116,10 @@ StockTradeBook MarketInfoParser::ParseStockTradeBook(const QByteArray& msg) {
         const auto price {ParseInteger<std::uint32_t>(NextField(view, cursor))};
         const auto frequency {ParseInteger<std::uint32_t>(NextField(view, cursor))};
         const auto volume {ParseInteger<std::uint64_t>(NextField(view, cursor))};
+
+        stockTradeBook.totalVolume += volume;
+        stockTradeBook.totalFrequency += frequency;
+        stockTradeBook.totalValue += price*volume;
 
         stockTradeBook.tradeLegs.emplace_back(TradeLeg{.volume=volume, .frequency=frequency, .price=price});
     }

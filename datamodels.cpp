@@ -51,51 +51,6 @@ QString TradeLeg::toString() const
     return QStringLiteral("TradeLeg{volume=%1, frequency=%2, price=%3}").arg(volume).arg(frequency).arg(price);
 }
 
-// StockData Class
-StockData::StockData() {
-    stockCode.reserve(maxStockCodeLength);
-}
-
-QString StockData::toString() const
-{
-    return QStringLiteral(
-               "StockData{"
-               "stockCode=%1, "
-               "previousPrice=%2, "
-               "openPrice=%3, "
-               "highestPrice=%4, "
-               "lowestPrice=%5, "
-               "lastPrice=%6, "
-               "lastVolume=%7, "
-               "change=%8, "
-               "changePercentage=%9, "
-               "bid=%10, "
-               "bidVolume=%11, "
-               "offer=%12, "
-               "offerVolume=%13, "
-               "totalFrequency=%14, "
-               "totalVolume=%15, "
-               "totalValue=%16"
-               "}"
-               )
-        .arg(stockCode)
-        .arg(previousPrice)
-        .arg(openPrice)
-        .arg(highestPrice)
-        .arg(lowestPrice)
-        .arg(lastPrice)
-        .arg(lastVolume)
-        .arg(change)
-        .arg(changePercentage)
-        .arg(bid)
-        .arg(bidVolume)
-        .arg(offer)
-        .arg(offerVolume)
-        .arg(totalFrequency)
-        .arg(totalVolume)
-        .arg(totalValue);
-}
-
 // UpdateStockOrderBook Class
 StockOrderBook::StockOrderBook () {
     stockCode.reserve(maxStockCodeLength);
@@ -108,6 +63,16 @@ QString StockOrderBook::toString() const
     for (const auto& leg : askLegs) asks.append(leg.toString());
     return QStringLiteral("StockOrderBook{stockCode=%1, marketCode=%2, bidLegAmount=%3, bidLegs=[%4], askLegAmount=%5, askLegs=[%6]}")
         .arg(stockCode).arg(::toString(marketCode)).arg(bidLegAmount).arg(bids.join(", ")).arg(askLegAmount).arg(asks.join(", "));
+}
+
+std::pair<OrderLeg, OrderLeg> StockOrderBook::GetBestBidAsk() const {
+    OrderLeg bestBid {};
+    if (!bidLegs.empty()) bestBid = bidLegs[0];
+
+    OrderLeg bestAsk {};
+    if (!askLegs.empty()) bestAsk = askLegs[0];
+
+    return std::pair(bestBid, bestAsk);
 }
 
 // UpdateStockTradeBook Class
@@ -153,4 +118,142 @@ IndicativeEquilibriumData::IndicativeEquilibriumData () {
 QString IndicativeEquilibriumData::toString() const
 {
     return QStringLiteral("IndicativeEquilibriumData{stockCode=%1, IEV=%2, IEP=%3, marketCode=%4}").arg(stockCode).arg(IEV).arg(IEP).arg(::toString(marketCode));
+}
+
+// PriceData Class
+PriceData::PriceData(QObject *parent)
+    : QObject(parent)
+{}
+
+void PriceData::UpdateInitialStockInfo(const InitialStockInfo& initialStockInfo) {
+    if (initialStockInfo.marketCode != MarketCode::RG) return;
+
+    const QString& stockCode = initialStockInfo.stockCode;
+    if (!m_priceDataMapRG.contains(stockCode)) m_priceDataMapRG[stockCode] = {.stockCode=stockCode};
+
+    PriceDataRow& row = m_priceDataMapRG[stockCode];
+
+    row.stockName = {};
+    row.status = {};
+    row.spNotation = {};
+    row.updateTime = QDateTime::currentDateTime();
+
+    const auto [bestBid, bestAsk] = initialStockInfo.stockOrderBook.GetBestBidAsk();
+
+    row.bidVolume = bestBid.volume;
+    row.offerVolume = bestAsk.volume;
+    row.totalFrequency = initialStockInfo.totalFrequency;
+    row.totalVolume = initialStockInfo.totalVolume;
+    row.totalValue = initialStockInfo.totalValue;
+    row.totalAllFreq = 0;
+    row.totalAllVolume = 0;
+    row.totalAllValue = 0;
+
+    row.previousPrice = initialStockInfo.previousPrice;
+    row.openPrice = initialStockInfo.openPrice;
+    row.highestPrice = initialStockInfo.highPrice;
+    row.lowestPrice = initialStockInfo.lowPrice;
+    row.lastPrice = initialStockInfo.lastPrice;
+    row.lastVolume = 0; // TO DO: Verify if this is correct
+    row.change = static_cast<std::int32_t>(initialStockInfo.lastPrice) - static_cast<std::int32_t>(initialStockInfo.previousPrice);
+    row.bid = bestBid.price;
+    row.offer = bestAsk.price;
+
+    row.changePercentage = initialStockInfo.previousPrice == 0? 0.0 : static_cast<double>(row.change)/initialStockInfo.previousPrice;
+
+    row.IEPriceOp = initialStockInfo.IEP;
+    row.IEVolOp = initialStockInfo.IEV;
+    row.IEPriceCl = initialStockInfo.IEPClosing;
+    row.IEVolCl = initialStockInfo.IEVClosing;
+    row.IEPriceSpMonitoring = 0;
+    row.IEVolSpMonitoring = 0;
+    row.bBidIEP = 0;
+    row.bBidIEV = 0;
+    row.bOfferIEP = 0;
+    row.bOfferIEV = 0;
+}
+
+void PriceData::UpdateStockOrderBook(const StockOrderBook& stockOrderBook) {
+    if (stockOrderBook.marketCode != MarketCode::RG) return;
+
+    const QString& stockCode = stockOrderBook.stockCode;
+    if (!m_priceDataMapRG.contains(stockCode)) m_priceDataMapRG[stockCode] = {.stockCode=stockCode};
+
+    PriceDataRow& row = m_priceDataMapRG[stockCode];
+    const auto [bestBid, bestAsk] = stockOrderBook.GetBestBidAsk();
+
+    row.updateTime = QDateTime::currentDateTime();
+    row.bid = bestBid.price;
+    row.bidVolume = bestBid.volume;
+    row.offer = bestAsk.price;
+    row.offerVolume = bestAsk.volume;
+}
+
+void PriceData::UpdateStockTradeBook(const StockTradeBook& stockTradeBook) {
+    if (stockTradeBook.marketCode != MarketCode::RG) return;
+
+    const QString& stockCode = stockTradeBook.stockCode;
+    if (!m_priceDataMapRG.contains(stockCode)) m_priceDataMapRG[stockCode] = {.stockCode=stockCode};
+
+    PriceDataRow& row = m_priceDataMapRG[stockCode];
+
+    row.updateTime = QDateTime::currentDateTime();
+    row.totalFrequency = stockTradeBook.totalFrequency;
+    row.totalVolume = stockTradeBook.totalVolume;
+    row.totalValue = stockTradeBook.totalValue;
+}
+
+void PriceData::UpdateTrade(const Trade& tradeData) {
+    if (tradeData.marketCode != MarketCode::RG) return;
+
+    const QString& stockCode = tradeData.stockCode;
+    if (!m_priceDataMapRG.contains(stockCode)) m_priceDataMapRG[stockCode] = {.stockCode=stockCode};
+
+    PriceDataRow& row = m_priceDataMapRG[stockCode];
+
+    const auto milliseconds = std::chrono::duration_cast<std::chrono::milliseconds>(tradeData.tradeTime.time_since_epoch()).count();
+    row.updateTime = QDateTime::fromMSecsSinceEpoch(milliseconds, QTimeZone("Asia/Jakarta"));
+    row.lastPrice = tradeData.price;
+    row.lastVolume = tradeData.volume;
+
+    if (row.openPrice == 0) row.openPrice = tradeData.price;
+    if (row.highestPrice == 0 || tradeData.price > row.highestPrice) row.highestPrice = tradeData.price;
+    if (row.lowestPrice == 0 || tradeData.price < row.lowestPrice) row.lowestPrice = tradeData.price;
+
+    ++row.totalFrequency;
+    row.totalVolume += tradeData.volume;
+    row.totalValue += static_cast<std::uint64_t>(tradeData.price) * tradeData.volume;
+
+    row.change = static_cast<std::int32_t>(row.lastPrice) - static_cast<std::int32_t>(row.previousPrice);
+    row.changePercentage = row.previousPrice == 0 ? 0.0 : static_cast<double>(row.change) / static_cast<double>(row.previousPrice);
+}
+
+void PriceData::UpdateIndicativeEquilibriumOpeningData(const IndicativeEquilibriumData& IEData) {
+    if (IEData.marketCode != MarketCode::RG) return;
+
+    const QString& stockCode = IEData.stockCode;
+    if (!m_priceDataMapRG.contains(stockCode)) m_priceDataMapRG[stockCode] = {.stockCode=stockCode};
+
+    PriceDataRow& row = m_priceDataMapRG[stockCode];
+
+    row.updateTime = QDateTime::currentDateTime();
+    row.IEPriceOp = IEData.IEP;
+    row.IEVolOp = IEData.IEV;
+}
+
+void PriceData::UpdateIndicativeEquilibriumClosingData(const IndicativeEquilibriumData& IEData) {
+    if (IEData.marketCode != MarketCode::RG) return;
+
+    const QString& stockCode = IEData.stockCode;
+    if (!m_priceDataMapRG.contains(stockCode)) m_priceDataMapRG[stockCode] = {.stockCode=stockCode};
+
+    PriceDataRow& row = m_priceDataMapRG[stockCode];
+
+    row.updateTime = QDateTime::currentDateTime();
+    row.IEPriceCl = IEData.IEP;
+    row.IEVolCl = IEData.IEV;
+}
+
+std::unordered_map<QString, PriceDataRow> PriceData::GetPriceDataSnapshot() const {
+    return m_priceDataMapRG;
 }

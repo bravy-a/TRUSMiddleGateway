@@ -39,5 +39,4 @@ private:
 
     // Helper attributes
     std::chrono::year_month_day m_date; // Used to indicate the current trade date for the timestamp.
-
 };

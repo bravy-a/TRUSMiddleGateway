@@ -1,13 +1,22 @@
 #pragma once
 
+#include <concepts>
 #include <cstddef>
 #include <cstdint>
-#include <QString>
 #include <chrono>
-#include <QDateTime>
+#include <string_view>
+#include <unordered_map>
+#include <utility>
+#include <variant>
+#include <vector>
 
+#include <QDateTime>
+#include <QString>
+
+// TO DO: Move this away later
 constexpr std::size_t maxStockCodeLength = 10;
 constexpr std::size_t maxMarketCodeLength = 2;
+constexpr std::size_t tickerAmount = 1582; // Total number of tickers active in the exchange
 
 template <typename T>
 concept GenericInteger = std::integral<T> && !std::same_as<T, bool>; // All unsigned int types but exclude bool.
@@ -54,32 +63,6 @@ struct TradeLeg {
     [[nodiscard]] QString toString() const;
 };
 
-struct StockData
-{
-    StockData(); // Just to reserve memory for QString
-
-    QString stockCode;
-
-    double changePercentage;
-
-    std::uint64_t bidVolume {};
-    std::uint64_t offerVolume {};
-    std::uint64_t totalFrequency {};
-    std::uint64_t totalVolume {};
-    std::uint64_t totalValue {};
-    std::uint32_t previousPrice {};
-    std::uint32_t openPrice {};
-    std::uint32_t highestPrice {};
-    std::uint32_t lowestPrice {};
-    std::uint32_t lastPrice {};
-    std::uint32_t lastVolume {};
-    std::int32_t change {};
-    std::uint32_t bid {};
-    std::uint32_t offer {};
-
-    [[nodiscard]] QString toString() const;
-};
-
 struct StockOrderBook {
     StockOrderBook(); // Memory reserve
 
@@ -90,16 +73,23 @@ struct StockOrderBook {
     std::uint32_t askLegAmount;
     std::vector<OrderLeg> askLegs;
 
+    std::pair<OrderLeg, OrderLeg> GetBestBidAsk() const;
+
     [[nodiscard]] QString toString() const;
 };
 
 struct StockTradeBook {
     StockTradeBook(); // Memory Reserve
 
+    std::vector<TradeLeg> tradeLegs;
+
     QString stockCode;
+    std::uint64_t totalFrequency {0};
+    std::uint64_t totalVolume {0};
+    std::uint64_t totalValue {0};
+
     MarketCode marketCode;
     std::uint32_t tradeLegAmount;
-    std::vector<TradeLeg> tradeLegs;
 
     [[nodiscard]] QString toString() const;
 };
@@ -196,6 +186,25 @@ struct PriceDataRow {
     std::uint32_t bBidIEV;
     std::uint32_t bOfferIEP;
     std::uint32_t bOfferIEV;
+};
+
+class PriceData : public QObject
+{
+    Q_OBJECT
+public:
+    PriceData(QObject *parent = nullptr);
+
+    void UpdateInitialStockInfo(const InitialStockInfo& initialStockInfo);
+    void UpdateStockOrderBook(const StockOrderBook& stockOrderBook);
+    void UpdateStockTradeBook(const StockTradeBook& stockTradeBook);
+    void UpdateTrade(const Trade& tradeData);
+    void UpdateIndicativeEquilibriumOpeningData(const IndicativeEquilibriumData& IEData);
+    void UpdateIndicativeEquilibriumClosingData(const IndicativeEquilibriumData& IEData);
+
+    [[nodiscard]] std::unordered_map<QString, PriceDataRow> GetPriceDataSnapshot() const;
+
+private:
+    std::unordered_map<QString, PriceDataRow> m_priceDataMapRG {}; // Regular Market Only
 };
 
 using ParsedDataTypes = std::variant<StockOrderBook, StockTradeBook, InitialStockInfo, Trade, IndicativeEquilibriumData>;
