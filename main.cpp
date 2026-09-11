@@ -7,26 +7,30 @@
 #include <cstdint>
 #include <QCoreApplication>
 #include <QDateTime>
-#include <QTimeZone>
-#include <QThread>
-#include <QTimer>
 #include <QDebug>
-#include "telnetreader.h"
-#include "marketinfoparser.h"
+#include <QGuiApplication>
+#include <QQmlApplicationEngine>
+#include <QThread>
+#include <QTimeZone>
+#include <QTimer>
+#include <QVariant>
 #include "datamodels.h"
+#include "marketinfoparser.h"
+#include "marketinfosummarymodel.h"
+#include "telnetreader.h"
 #include "trusdbworker.h"
 
 using namespace std::chrono_literals;
 
 int main(int argc, char* argv[])
 {
-    QCoreApplication app(argc, argv);
+    QGuiApplication app(argc, argv);
 
     // TRUS CREDS
     // TO DO move ts to a config file
-    const QString hostName {};
+    const QString hostName {""};
     const quint16 port {};
-    const QByteArray command {};
+    const QByteArray command {""};
 
     // DB CREDS
     // TO DO
@@ -53,6 +57,18 @@ int main(int argc, char* argv[])
 
     MarketInfoParser marketInfoParser {tradingDate};
     PriceData priceData;
+    MarketInfoSummaryModel marketInfoSummary;
+
+    QQmlApplicationEngine engine;
+    engine.setInitialProperties({
+        {QStringLiteral("marketInfoSummary"), QVariant::fromValue(&marketInfoSummary)}
+    });
+
+    QObject::connect(&engine, &QQmlApplicationEngine::objectCreationFailed, &app, [] {
+        QCoreApplication::exit(-1);
+    }, Qt::QueuedConnection);
+
+    engine.loadFromModule("TRUSMiddleGateway", "Main");
 
     // Spawn DB worker on a separate thread
     QThread dbThread;
@@ -75,8 +91,8 @@ int main(int argc, char* argv[])
         qInfo() << "Connected to TRUS";
     });
 
-    QObject::connect(telnet.get(), &TelnetReader::disconnected, [] {qInfo() << "Disconnected from TRUS";});
-    QObject::connect(telnet.get(), &TelnetReader::errorOcurred, [](const QString& error) {qWarning() << "Telnet error:" << error;});
+    QObject::connect(telnet.get(), &TelnetReader::disconnected, [] { qInfo() << "Disconnected from TRUS"; });
+    QObject::connect(telnet.get(), &TelnetReader::errorOcurred, [](const QString& error) { qWarning() << "Telnet error:" << error; });
 
     // Track changes to consider what has to be updated.
     std::unordered_set<QString> dirtyStocks, inFlightStocks;
@@ -101,16 +117,35 @@ int main(int argc, char* argv[])
         }, connectionType);
     };
 
-    // Main parser of each msg from TRUS
+    // Main parser of each msg from TRUS.
+    // Replies server heartbeat when received.
     // TO DO: After you clean up the parser you can clean up some of the branching here
     QObject::connect(telnet.get(), &TelnetReader::lineReceived, &app, [&](const QByteArray& line) {
         if (line.isEmpty()) return;
 
         const char messageType {line.front()};
-        if (messageType == 'R' || messageType == 'S') return;
+
+        if (messageType == 'R') {
+            marketInfoSummary.recordMessage(messageType);
+            return;
+        }
+
+        if (messageType == 'S') {
+            marketInfoSummary.recordServerHeartbeat();
+
+            if (telnet->isConnected()) {
+                telnet->writeLine("C|");
+                marketInfoSummary.recordClientHeartbeat();
+            }
+
+            return;
+        }
 
         try {
             const ParsedDataTypes parsedData {marketInfoParser.ParseMessage(line)};
+
+            // Count the feed message after successful parsing, before the RG-only filter.
+            marketInfoSummary.recordMessage(messageType);
 
             std::visit([&](const auto& data) {
                 using T = std::decay_t<decltype(data)>;
@@ -173,6 +208,7 @@ int main(int argc, char* argv[])
     });
 
     // Benchmarking
+    // TO DO: Remove in final build
     QTimer benchmarkTimer;
     benchmarkTimer.setInterval(1000);
 

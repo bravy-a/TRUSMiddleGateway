@@ -29,7 +29,8 @@ qt_add_qml_module(appTRUSMiddleGateway
         datamodels.h datamodels.cpp
         marketinfoparser.h marketinfoparser.cpp
         sql.h sql.cpp
-        SOURCES trusdbworker.h trusdbworker.cpp
+        trusdbworker.h trusdbworker.cpp
+        marketinfosummarymodel.h marketinfosummarymodel.cpp
 )
 
 # Qt for iOS sets MACOSX_BUNDLE_GUI_IDENTIFIER automatically since Qt 6.1.
