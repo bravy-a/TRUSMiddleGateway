@@ -28,13 +28,10 @@ ParsedDataTypes MarketInfoParser::ParseMessage(const QByteArray& msg) {
     case 'f':
         return ParseIndicativeEquilibriumClosingData(msg);
 
-    // Utilities (TO DO: Implement)
     case 'R':
-        qInfo() << "LOGIN MESSAGE DETECTED!" + msg;
-        return Trade{}; // TO DO
+        return std::monostate{};
     case 'S':
-        qInfo() << "HEARTBEAT DETECTED!" + msg;
-        return Trade{}; // TO DO
+        return std::monostate{};
     default:
         throw std::invalid_argument("cannot parse this message" + msg); // Change this later
     }

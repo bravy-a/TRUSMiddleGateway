@@ -48,6 +48,12 @@ target_link_libraries(appTRUSMiddleGateway
 PRIVATE Qt6::Quick Qt6::Network Qt6::Sql
 )
 
+add_custom_command(TARGET appTRUSMiddleGateway POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        "${CMAKE_CURRENT_SOURCE_DIR}/config.ini"
+        "$<TARGET_FILE_DIR:appTRUSMiddleGateway>/config.ini"
+)
+
 install(TARGETS appTRUSMiddleGateway
     BUNDLE DESTINATION .
     LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}

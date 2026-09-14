@@ -1,4 +1,5 @@
 #include "trusdbworker.h"
+#include "datamodels.h"
 
 #include <QSqlQuery>
 #include <limits>
@@ -43,7 +44,7 @@ constexpr QStringView PriceDataUpsertSql = uR"(
              s.[TotalFrequency],s.[TotalVolume],s.[TotalValue],s.[TotalAllFreq],s.[TotalAllVolume],s.[TotalAllValue],
              s.[SpNotation],s.[IEPriceOp],s.[IEVolOp],s.[IEPriceCl],s.[IEVolCl],s.[IEPriceSpMonitoring],s.[IEVolSpMonitoring],
              s.[BBidIEP],s.[BBidIEV],s.[BOfferIEP],s.[BOfferIEV]);
-    )";
+)";
 
 qint32 toSqlInt(std::uint32_t value) {
     if (value > static_cast<std::uint32_t>(std::numeric_limits<qint32>::max()))
@@ -70,6 +71,9 @@ void TRUSDBWorker::initialize() {
     }
 }
 
+/* For backwards compatibility, every volume except the `bidVolume` and `offerVolume` is represented per lots,
+ * whereas `bidVolume` and `offerVolume` is represented per shares.
+*/
 void TRUSDBWorker::uploadPriceData(std::vector<PriceDataRow> rows) {
     if (rows.empty()) return;
 
@@ -91,7 +95,7 @@ void TRUSDBWorker::uploadPriceData(std::vector<PriceDataRow> rows) {
             query.bindValue(6, toSqlInt(row.highestPrice));
             query.bindValue(7, toSqlInt(row.lowestPrice));
             query.bindValue(8, toSqlInt(row.lastPrice));
-            query.bindValue(9, toSqlInt(row.lastVolume));
+            query.bindValue(9, toSqlInt(row.lastVolume/lotSize));
             query.bindValue(10, static_cast<qint32>(row.change));
             query.bindValue(11, row.changePercentage);
             query.bindValue(12, toSqlInt(row.bid));
@@ -99,22 +103,22 @@ void TRUSDBWorker::uploadPriceData(std::vector<PriceDataRow> rows) {
             query.bindValue(14, toSqlInt(row.offer));
             query.bindValue(15, toSqlBigInt(row.offerVolume));
             query.bindValue(16, toSqlBigInt(row.totalFrequency));
-            query.bindValue(17, toSqlBigInt(row.totalVolume));
+            query.bindValue(17, toSqlBigInt(row.totalVolume/lotSize));
             query.bindValue(18, toSqlBigInt(row.totalValue));
             query.bindValue(19, toSqlBigInt(row.totalAllFreq));
-            query.bindValue(20, toSqlBigInt(row.totalAllVolume));
+            query.bindValue(20, toSqlBigInt(row.totalAllVolume/lotSize));
             query.bindValue(21, toSqlBigInt(row.totalAllValue));
             query.bindValue(22, row.spNotation);
             query.bindValue(23, toSqlInt(row.IEPriceOp));
-            query.bindValue(24, toSqlInt(row.IEVolOp));
+            query.bindValue(24, toSqlInt(row.IEVolOp/lotSize));
             query.bindValue(25, toSqlInt(row.IEPriceCl));
-            query.bindValue(26, toSqlInt(row.IEVolCl));
+            query.bindValue(26, toSqlInt(row.IEVolCl/lotSize));
             query.bindValue(27, toSqlInt(row.IEPriceSpMonitoring));
-            query.bindValue(28, toSqlInt(row.IEVolSpMonitoring));
+            query.bindValue(28, toSqlInt(row.IEVolSpMonitoring/lotSize));
             query.bindValue(29, toSqlInt(row.bBidIEP));
-            query.bindValue(30, toSqlInt(row.bBidIEV));
+            query.bindValue(30, toSqlInt(row.bBidIEV/lotSize));
             query.bindValue(31, toSqlInt(row.bOfferIEP));
-            query.bindValue(32, toSqlInt(row.bOfferIEV));
+            query.bindValue(32, toSqlInt(row.bOfferIEV/lotSize));
         });
 
         emit uploadCompleted(rowCount);

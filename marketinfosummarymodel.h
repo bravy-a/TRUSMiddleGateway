@@ -9,9 +9,7 @@
 #include <array>
 #include <cstddef>
 #include <cstdint>
-
-// TO DO: Move to config
-static const QTimeZone defaultTimezone {"Asia/Jakarta"};
+#include "datamodels.h"
 
 enum class SummaryRow : std::size_t {
     LoginReply,

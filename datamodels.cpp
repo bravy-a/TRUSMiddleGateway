@@ -154,7 +154,7 @@ void PriceData::UpdateInitialStockInfo(const InitialStockInfo& initialStockInfo)
     row.highestPrice = initialStockInfo.highPrice;
     row.lowestPrice = initialStockInfo.lowPrice;
     row.lastPrice = initialStockInfo.lastPrice;
-    row.lastVolume = 0; // TO DO: Verify if this is correct
+    row.lastVolume = 0;
     row.change = static_cast<std::int32_t>(initialStockInfo.lastPrice) - static_cast<std::int32_t>(initialStockInfo.previousPrice);
     row.bid = bestBid.price;
     row.offer = bestAsk.price;

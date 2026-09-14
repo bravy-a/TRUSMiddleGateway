@@ -73,6 +73,6 @@ void MarketInfoSummaryModel::increment(SummaryRow row) {
 }
 
 QString MarketInfoSummaryModel::currentTime(QTimeZone timeZone) {
-    static const QTimeZone jakartaTimeZone {"Asia/Jakarta"};
-    return QDateTime::currentDateTimeUtc().toTimeZone(jakartaTimeZone).toString(QStringLiteral("HH:mm:ss 'WIB'"));
+    static const QTimeZone jakartaTimeZone {defaultTimezone};
+    return QDateTime::currentDateTimeUtc().toTimeZone(jakartaTimeZone).toString(QStringLiteral("HH:mm:ss"));
 }

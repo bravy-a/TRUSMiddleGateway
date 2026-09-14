@@ -14,6 +14,7 @@
 #include <QTimeZone>
 #include <QTimer>
 #include <QVariant>
+#include <QSettings>
 #include "datamodels.h"
 #include "marketinfoparser.h"
 #include "marketinfosummarymodel.h"
@@ -26,29 +27,32 @@ int main(int argc, char* argv[])
 {
     QGuiApplication app(argc, argv);
 
-    // TRUS CREDS
-    // TO DO move ts to a config file
-    const QString hostName {""};
-    const quint16 port {};
-    const QByteArray command {""};
+    QSettings settings("config.ini", QSettings::IniFormat);
 
-    // DB CREDS
-    // TO DO
+    settings.beginGroup("TRUS");
+    const QString hostName = settings.value("hostName").toString();
+    const quint16 port = settings.value("port").value<quint16>();
+    const QByteArray command = settings.value("command").toByteArray();
+    settings.endGroup();
+
+    settings.beginGroup("DATABASE");
     DBPayload dbPayload;
-    dbPayload.driver = "";
-    dbPayload.server = "";
-    dbPayload.dbName = "";
-    dbPayload.userName = "";
-    dbPayload.userPassword = "";
+    dbPayload.driver = settings.value("driver").toString();
+    dbPayload.server = settings.value("server").toString();
+    dbPayload.dbName = settings.value("dbName").toString();
+    dbPayload.userName = settings.value("userName").toString();
+    dbPayload.userPassword = settings.value("userPassword").toString();
+    settings.endGroup();
+
+    // Uplaod Timing
+    constexpr int uploadInterval {1000};
 
     if (dbPayload.driver.isEmpty() || dbPayload.server.isEmpty() || dbPayload.dbName.isEmpty() || dbPayload.userName.isEmpty() || dbPayload.userPassword.isEmpty()) {
         qCritical() << "TRUS database configuration is incomplete";
         return 1;
     }
 
-    // TDate in WIB
-    // TO DO
-    const QDate qTradingDate {QDateTime::currentDateTimeUtc().toTimeZone(QTimeZone("Asia/Jakarta")).date()};
+    const QDate qTradingDate {QDateTime::currentDateTimeUtc().toTimeZone(QTimeZone(defaultTimezone)).date()};
     const std::chrono::year_month_day tradingDate {
         std::chrono::year {qTradingDate.year()},
         std::chrono::month {static_cast<unsigned>(qTradingDate.month())},
@@ -95,7 +99,7 @@ int main(int argc, char* argv[])
     QObject::connect(telnet.get(), &TelnetReader::errorOcurred, [](const QString& error) { qWarning() << "Telnet error:" << error; });
 
     // Track changes to consider what has to be updated.
-    std::unordered_set<QString> dirtyStocks, inFlightStocks;
+    std::unordered_set<QString> updatedStocks, uploadingStocks;
     bool uploadInFlight {false};
 
     std::uint64_t parsedLines {0};
@@ -119,17 +123,18 @@ int main(int argc, char* argv[])
 
     // Main parser of each msg from TRUS.
     // Replies server heartbeat when received.
-    // TO DO: After you clean up the parser you can clean up some of the branching here
     QObject::connect(telnet.get(), &TelnetReader::lineReceived, &app, [&](const QByteArray& line) {
         if (line.isEmpty()) return;
 
         const char messageType {line.front()};
 
+        // Record login confirmation
         if (messageType == 'R') {
             marketInfoSummary.recordMessage(messageType);
             return;
         }
 
+        // Record heartbeat from server and reply with client heartbeat
         if (messageType == 'S') {
             marketInfoSummary.recordServerHeartbeat();
 
@@ -141,27 +146,29 @@ int main(int argc, char* argv[])
             return;
         }
 
+        // Parse message and add to counter
         try {
             const ParsedDataTypes parsedData {marketInfoParser.ParseMessage(line)};
-
-            // Count the feed message after successful parsing, before the RG-only filter.
             marketInfoSummary.recordMessage(messageType);
 
             std::visit([&](const auto& data) {
                 using T = std::decay_t<decltype(data)>;
 
-                if (data.marketCode != MarketCode::RG) return;
+                if constexpr (std::is_same_v<T, std::monostate>) {return;}
+                else {
+                    if (data.marketCode != MarketCode::RG) return;
 
-                if constexpr (std::is_same_v<T, InitialStockInfo>) priceData.UpdateInitialStockInfo(data);
-                else if constexpr (std::is_same_v<T, StockOrderBook>) priceData.UpdateStockOrderBook(data);
-                else if constexpr (std::is_same_v<T, StockTradeBook>) priceData.UpdateStockTradeBook(data);
-                else if constexpr (std::is_same_v<T, Trade>) priceData.UpdateTrade(data);
-                else if constexpr (std::is_same_v<T, IndicativeEquilibriumData>) {
-                    if (messageType == 'e') priceData.UpdateIndicativeEquilibriumOpeningData(data);
-                    else if (messageType == 'f') priceData.UpdateIndicativeEquilibriumClosingData(data);
+                    if constexpr (std::is_same_v<T, InitialStockInfo>) priceData.UpdateInitialStockInfo(data);
+                    else if constexpr (std::is_same_v<T, StockOrderBook>) priceData.UpdateStockOrderBook(data);
+                    else if constexpr (std::is_same_v<T, StockTradeBook>) priceData.UpdateStockTradeBook(data);
+                    else if constexpr (std::is_same_v<T, Trade>) priceData.UpdateTrade(data);
+                    else if constexpr (std::is_same_v<T, IndicativeEquilibriumData>) {
+                        if (messageType == 'e') priceData.UpdateIndicativeEquilibriumOpeningData(data);
+                        else if (messageType == 'f') priceData.UpdateIndicativeEquilibriumClosingData(data);
+                    }
+
+                    updatedStocks.insert(data.stockCode);
                 }
-
-                dirtyStocks.insert(data.stockCode);
             }, parsedData);
 
             ++parsedLines;
@@ -173,19 +180,19 @@ int main(int argc, char* argv[])
 
     // Batch upload to DB
     QTimer uploadTimer;
-    uploadTimer.setInterval(1000);
+    uploadTimer.setInterval(uploadInterval);
 
     QObject::connect(&uploadTimer, &QTimer::timeout, &app, [&] {
-        if (uploadInFlight || dirtyStocks.empty()) return;
+        if (uploadInFlight || updatedStocks.empty()) return;
 
-        auto rows = makeRows(dirtyStocks);
+        auto rows = makeRows(updatedStocks);
         if (rows.empty()) {
-            dirtyStocks.clear();
+            updatedStocks.clear();
             return;
         }
 
-        inFlightStocks.clear();
-        inFlightStocks.swap(dirtyStocks);
+        uploadingStocks.clear();
+        uploadingStocks.swap(updatedStocks);
         uploadInFlight = true;
 
         uploadRows(std::move(rows), Qt::QueuedConnection);
@@ -193,48 +200,35 @@ int main(int argc, char* argv[])
 
     QObject::connect(dbWorker, &TRUSDBWorker::uploadCompleted, &app, [&](qsizetype rowCount) {
         uploadInFlight = false;
-        inFlightStocks.clear();
+        uploadingStocks.clear();
         qInfo() << "Uploaded rows:" << rowCount;
     });
 
     QObject::connect(dbWorker, &TRUSDBWorker::errorOccurred, &app, [&](const QString& error) {
         if (uploadInFlight) {
-            dirtyStocks.insert(inFlightStocks.begin(), inFlightStocks.end());
-            inFlightStocks.clear();
+            updatedStocks.insert(uploadingStocks.begin(), uploadingStocks.end());
+            uploadingStocks.clear();
             uploadInFlight = false;
         }
 
         qWarning() << "Database error:" << error;
     });
 
-    // Benchmarking
-    // TO DO: Remove in final build
-    QTimer benchmarkTimer;
-    benchmarkTimer.setInterval(1000);
-
-    QObject::connect(&benchmarkTimer, &QTimer::timeout, [&] {
-        qInfo() << "Parsed lines/sec:" << parsedLines;
-        parsedLines = 0;
-    });
 
     // TRUS data feed not started until the DB connection is established
     QObject::connect(dbWorker, &TRUSDBWorker::initialized, &app, [&] {
         qInfo() << "TRUS database initialized";
         uploadTimer.start();
-        benchmarkTimer.start();
         telnet->connectToHost();
     });
 
     // Clean shutdown
     QObject::connect(&app, &QCoreApplication::aboutToQuit, &app, [&] {
-        uploadTimer.stop();
-        benchmarkTimer.stop();
-
         telnet.reset();
 
         // Flush anything that changed after the previous batch was started
-        if (!dirtyStocks.empty()) {
-            auto rows = makeRows(dirtyStocks);
+        if (!updatedStocks.empty()) {
+            auto rows = makeRows(updatedStocks);
             if (!rows.empty()) uploadRows(std::move(rows), Qt::BlockingQueuedConnection);
         }
 

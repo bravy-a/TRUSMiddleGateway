@@ -9,17 +9,18 @@
 #include <utility>
 #include <variant>
 #include <vector>
-
+#include <QTimeZone>
 #include <QDateTime>
 #include <QString>
 
-// TO DO: Move this away later
 constexpr std::size_t maxStockCodeLength = 10;
 constexpr std::size_t maxMarketCodeLength = 2;
-constexpr std::size_t tickerAmount = 1582; // Total number of tickers active in the exchange
+constexpr std::int32_t lotSize = 100;
+constexpr std::size_t tickerAmount = 1582; // Estimated total number of tickers active in the exchange. This is used as a ballpark figure, only for initial memory reservation.
+static const QTimeZone defaultTimezone {"Asia/Jakarta"};
 
 template <typename T>
-concept GenericInteger = std::integral<T> && !std::same_as<T, bool>; // All unsigned int types but exclude bool.
+concept GenericInteger = std::integral<T> && !std::same_as<T, bool>; // All int types but exclude bool.
 
 using sys_datetime = std::chrono::time_point<std::chrono::system_clock>;
 
@@ -207,4 +208,4 @@ private:
     std::unordered_map<QString, PriceDataRow> m_priceDataMapRG {}; // Regular Market Only
 };
 
-using ParsedDataTypes = std::variant<StockOrderBook, StockTradeBook, InitialStockInfo, Trade, IndicativeEquilibriumData>;
+using ParsedDataTypes = std::variant<std::monostate, StockOrderBook, StockTradeBook, InitialStockInfo, Trade, IndicativeEquilibriumData>;
