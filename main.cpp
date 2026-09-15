@@ -44,8 +44,8 @@ int main(int argc, char* argv[])
     dbPayload.userPassword = settings.value("userPassword").toString();
     settings.endGroup();
 
-    // Uplaod Timing
-    constexpr int uploadInterval {1000};
+    settings.beginGroup("LOGIC");
+    const int uploadInterval {settings.value("uploadInterval").toInt()};
 
     if (dbPayload.driver.isEmpty() || dbPayload.server.isEmpty() || dbPayload.dbName.isEmpty() || dbPayload.userName.isEmpty() || dbPayload.userPassword.isEmpty()) {
         qCritical() << "TRUS database configuration is incomplete";

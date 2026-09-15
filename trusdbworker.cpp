@@ -12,7 +12,7 @@ TRUSDBWorker::TRUSDBWorker(DBPayload payload, QString connectionName, QObject* p
 
 namespace {
 constexpr QStringView PriceDataUpsertSql = uR"(
-        MERGE [ED_UAT].[dbo].[PRICE_TRUS] AS t
+        MERGE [ED].[dbo].[PRICE_TRUS] AS t
         USING (VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?))
         AS s ([UpdateTime],[StockCode],[StockName],[Status],[PreviousPrice],[OpenPrice],[HighestPrice],[LowestPrice],
               [LastPrice],[LastVolume],[Change],[ChangePercentage],[Bid],[BidVolume],[Offer],[OfferVolume],
