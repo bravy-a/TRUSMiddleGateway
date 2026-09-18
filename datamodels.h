@@ -150,10 +150,13 @@ struct IndicativeEquilibriumData {
 };
 
 struct PriceDataRow {
-    QString stockCode;
-    QString stockName;
-    QString status;
-    QString spNotation;
+    QString stockCode {""};
+
+    // These three attributes is not provided by TRUS but should be set to an empty string for backwards compatibility.
+    QString stockName {""};
+    QString status {""};
+    QString spNotation {""};
+
     QDateTime updateTime;
 
     double changePercentage;

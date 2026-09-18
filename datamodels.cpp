@@ -133,9 +133,9 @@ void PriceData::UpdateInitialStockInfo(const InitialStockInfo& initialStockInfo)
 
     PriceDataRow& row = m_priceDataMapRG[stockCode];
 
-    row.stockName = {};
-    row.status = {};
-    row.spNotation = {};
+    row.stockName = ""; // These three attributes is not provided by TRUS but should be set to an empty string for backwards compatibility.
+    row.status = "";
+    row.spNotation = "";
     row.updateTime = QDateTime::currentDateTime();
 
     const auto [bestBid, bestAsk] = initialStockInfo.stockOrderBook.GetBestBidAsk();
