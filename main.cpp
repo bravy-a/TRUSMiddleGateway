@@ -44,11 +44,26 @@ int main(int argc, char* argv[])
     dbPayload.userPassword = settings.value("userPassword").toString();
     settings.endGroup();
 
+    settings.beginGroup("SONA_DATABASE");
+    DBPayload dbPayloadSona;
+    dbPayloadSona.driver = settings.value("driver").toString();
+    dbPayloadSona.server = settings.value("server").toString();
+    dbPayloadSona.dbName = settings.value("dbName").toString();
+    dbPayloadSona.userName = settings.value("userName").toString();
+    dbPayloadSona.userPassword = settings.value("userPassword").toString();
+    settings.endGroup();
+
     settings.beginGroup("LOGIC");
     const int uploadInterval {settings.value("uploadInterval").toInt()};
+    settings.endGroup();
 
     if (dbPayload.driver.isEmpty() || dbPayload.server.isEmpty() || dbPayload.dbName.isEmpty() || dbPayload.userName.isEmpty() || dbPayload.userPassword.isEmpty()) {
         qCritical() << "TRUS database configuration is incomplete";
+        return 1;
+    }
+
+    if (dbPayloadSona.driver.isEmpty() || dbPayloadSona.server.isEmpty() || dbPayloadSona.dbName.isEmpty() || dbPayloadSona.userName.isEmpty() || dbPayloadSona.userPassword.isEmpty()) {
+        qCritical() << "Sona database configuration is incomplete";
         return 1;
     }
 
@@ -82,6 +97,14 @@ int main(int argc, char* argv[])
     QObject::connect(&dbThread, &QThread::started, dbWorker, &TRUSDBWorker::initialize);
     QObject::connect(&dbThread, &QThread::finished, dbWorker, &QObject::deleteLater);
 
+    // Spawn Sona DB worker on another thread
+    QThread dbThreadSona;
+    auto* dbWorkerSona = new TRUSDBWorker(std::move(dbPayloadSona), QStringLiteral("SONA_DB"));
+    dbWorkerSona->moveToThread(&dbThreadSona);
+
+    QObject::connect(&dbThreadSona, &QThread::started, dbWorkerSona, &TRUSDBWorker::initialize);
+    QObject::connect(&dbThreadSona, &QThread::finished, dbWorkerSona, &QObject::deleteLater);
+
     // Establish telnet connection
     auto telnet = std::make_unique<TelnetReader>(hostName, port, [](TelnetReader& telnet) {
         qInfo() << "TRUS Logout Sequence";
@@ -100,7 +123,16 @@ int main(int argc, char* argv[])
 
     // Track changes to consider what has to be updated.
     std::unordered_set<QString> updatedStocks, uploadingStocks;
+    //std::unordered_set<QString> updatedStocksSona, uploadingStocksSona;
+
     bool uploadInFlight {false};
+    bool uploadInFlightSona {false};
+
+    // Helper: clear uploadingStocks when all worker are finished
+    auto maybeClearUploading = [&] {
+        if (!uploadInFlight && !uploadInFlightSona)
+            uploadingStocks.clear();
+    };
 
     std::uint64_t parsedLines {0};
 
@@ -115,9 +147,17 @@ int main(int argc, char* argv[])
         return rows;
     };
 
+    // Upload function to KGI DB
     const auto uploadRows = [dbWorker](std::vector<PriceDataRow> rows, Qt::ConnectionType connectionType) {
         QMetaObject::invokeMethod(dbWorker, [dbWorker, rows = std::move(rows)]() mutable {
             dbWorker->uploadPriceData(std::move(rows));
+        }, connectionType);
+    };
+
+    // Upload function to Sona DB
+    const auto uploadRowsSona =[dbWorkerSona](std::vector<PriceDataRow> rows, Qt::ConnectionType connectionType) {
+        QMetaObject::invokeMethod(dbWorkerSona, [dbWorkerSona, rows = std::move(rows)]() mutable {
+            dbWorkerSona->uploadPriceData(std::move(rows));
         }, connectionType);
     };
 
@@ -183,7 +223,8 @@ int main(int argc, char* argv[])
     uploadTimer.setInterval(uploadInterval);
 
     QObject::connect(&uploadTimer, &QTimer::timeout, &app, [&] {
-        if (uploadInFlight || updatedStocks.empty()) return;
+        if (uploadInFlight || uploadInFlightSona || updatedStocks.empty())
+            return;
 
         auto rows = makeRows(updatedStocks);
         if (rows.empty()) {
@@ -191,35 +232,75 @@ int main(int argc, char* argv[])
             return;
         }
 
+        auto rowsSona = rows;   // copy for Sona
+
         uploadingStocks.clear();
         uploadingStocks.swap(updatedStocks);
         uploadInFlight = true;
+        uploadInFlightSona = true;
 
         uploadRows(std::move(rows), Qt::QueuedConnection);
+        uploadRowsSona(std::move(rowsSona), Qt::QueuedConnection);
     });
 
     QObject::connect(dbWorker, &TRUSDBWorker::uploadCompleted, &app, [&](qsizetype rowCount) {
         uploadInFlight = false;
-        uploadingStocks.clear();
+        maybeClearUploading();
         qInfo() << "Uploaded rows:" << rowCount;
     });
 
     QObject::connect(dbWorker, &TRUSDBWorker::errorOccurred, &app, [&](const QString& error) {
         if (uploadInFlight) {
             updatedStocks.insert(uploadingStocks.begin(), uploadingStocks.end());
-            uploadingStocks.clear();
             uploadInFlight = false;
         }
-
+        maybeClearUploading();
         qWarning() << "Database error:" << error;
     });
 
+    // Upload-Error for dbWorkerSona
+    QObject::connect(dbWorkerSona, &TRUSDBWorker::uploadCompleted, &app, [&](qsizetype rowCount) {
+        uploadInFlightSona = false;
+        maybeClearUploading(); // Clear when all worker is finised
+        qInfo() << "(Sona) Uploaded rows:" << rowCount;
+    });
 
-    // TRUS data feed not started until the DB connection is established
+    QObject::connect(dbWorkerSona, &TRUSDBWorker::errorOccurred, &app, [&](const QString& error) {
+        if (uploadInFlightSona) {
+            updatedStocks.insert(uploadingStocks.begin(), uploadingStocks.end());
+            uploadInFlightSona = false;
+        }
+        maybeClearUploading();
+        qWarning() << "(Sona) Database error:" << error;
+    });
+
+
+    // TRUS data feed not started until the KGI DB and SONA DB connection is established
+    // QObject::connect(dbWorker, &TRUSDBWorker::initialized, &app, [&] {
+    //     qInfo() << "TRUS database initialized";
+    //     uploadTimer.start();
+    //     telnet->connectToHost();
+    // });
+    bool initialized {false};
+    bool initializedSona {false};
+    bool feedStarted {false};
+
+    const auto startFeedIfReady = [&] {
+        if (initialized && initializedSona && !feedStarted){
+            feedStarted = true;
+            uploadTimer.start();
+            telnet->connectToHost();
+        }
+    };
+
     QObject::connect(dbWorker, &TRUSDBWorker::initialized, &app, [&] {
-        qInfo() << "TRUS database initialized";
-        uploadTimer.start();
-        telnet->connectToHost();
+        initialized = true;
+        startFeedIfReady();
+    });
+
+    QObject::connect(dbWorkerSona, &TRUSDBWorker::initialized, &app, [&] {
+        initializedSona = true;
+        startFeedIfReady();
     });
 
     // Clean shutdown
@@ -229,15 +310,24 @@ int main(int argc, char* argv[])
         // Flush anything that changed after the previous batch was started
         if (!updatedStocks.empty()) {
             auto rows = makeRows(updatedStocks);
-            if (!rows.empty()) uploadRows(std::move(rows), Qt::BlockingQueuedConnection);
+            if (!rows.empty()) {
+                auto rowsSona = rows;   // copy untuk Sona
+                uploadRows(std::move(rows), Qt::BlockingQueuedConnection);
+                uploadRowsSona(std::move(rowsSona), Qt::BlockingQueuedConnection);
+            }
         }
 
         QMetaObject::invokeMethod(dbWorker, &TRUSDBWorker::shutdown, Qt::BlockingQueuedConnection);
         dbThread.quit();
         dbThread.wait();
+
+        QMetaObject::invokeMethod(dbWorkerSona, &TRUSDBWorker::shutdown, Qt::BlockingQueuedConnection);
+        dbThreadSona.quit();
+        dbThreadSona.wait();
     });
 
     dbThread.start();
+    dbThreadSona.start();
 
     return app.exec();
 }
