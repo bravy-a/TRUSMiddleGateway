@@ -123,7 +123,6 @@ int main(int argc, char* argv[])
 
     // Track changes to consider what has to be updated.
     std::unordered_set<QString> updatedStocks, uploadingStocks;
-    //std::unordered_set<QString> updatedStocksSona, uploadingStocksSona;
 
     bool uploadInFlight {false};
     bool uploadInFlightSona {false};
@@ -148,16 +147,9 @@ int main(int argc, char* argv[])
     };
 
     // Upload function to KGI DB
-    const auto uploadRows = [dbWorker](std::vector<PriceDataRow> rows, Qt::ConnectionType connectionType) {
+    const auto uploadRows = [](std::vector<PriceDataRow> rows, Qt::ConnectionType connectionType, TRUSDBWorker* dbWorker) {
         QMetaObject::invokeMethod(dbWorker, [dbWorker, rows = std::move(rows)]() mutable {
             dbWorker->uploadPriceData(std::move(rows));
-        }, connectionType);
-    };
-
-    // Upload function to Sona DB
-    const auto uploadRowsSona =[dbWorkerSona](std::vector<PriceDataRow> rows, Qt::ConnectionType connectionType) {
-        QMetaObject::invokeMethod(dbWorkerSona, [dbWorkerSona, rows = std::move(rows)]() mutable {
-            dbWorkerSona->uploadPriceData(std::move(rows));
         }, connectionType);
     };
 
@@ -232,15 +224,13 @@ int main(int argc, char* argv[])
             return;
         }
 
-        auto rowsSona = rows;   // copy for Sona
-
         uploadingStocks.clear();
         uploadingStocks.swap(updatedStocks);
         uploadInFlight = true;
         uploadInFlightSona = true;
 
-        uploadRows(std::move(rows), Qt::QueuedConnection);
-        uploadRowsSona(std::move(rowsSona), Qt::QueuedConnection);
+        uploadRows(rows, Qt::QueuedConnection, dbWorker);
+        uploadRows(std::move(rows), Qt::QueuedConnection, dbWorkerSona);
     });
 
     QObject::connect(dbWorker, &TRUSDBWorker::uploadCompleted, &app, [&](qsizetype rowCount) {
@@ -276,11 +266,7 @@ int main(int argc, char* argv[])
 
 
     // TRUS data feed not started until the KGI DB and SONA DB connection is established
-    // QObject::connect(dbWorker, &TRUSDBWorker::initialized, &app, [&] {
-    //     qInfo() << "TRUS database initialized";
-    //     uploadTimer.start();
-    //     telnet->connectToHost();
-    // });
+
     bool initialized {false};
     bool initializedSona {false};
     bool feedStarted {false};
@@ -311,9 +297,8 @@ int main(int argc, char* argv[])
         if (!updatedStocks.empty()) {
             auto rows = makeRows(updatedStocks);
             if (!rows.empty()) {
-                auto rowsSona = rows;   // copy untuk Sona
-                uploadRows(std::move(rows), Qt::BlockingQueuedConnection);
-                uploadRowsSona(std::move(rowsSona), Qt::BlockingQueuedConnection);
+                uploadRows(rows, Qt::BlockingQueuedConnection, dbWorker);
+                uploadRows(std::move(rows), Qt::BlockingQueuedConnection, dbWorkerSona);
             }
         }
 
