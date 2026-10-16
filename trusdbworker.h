@@ -15,6 +15,7 @@ class TRUSDBWorker final : public QObject
 public:
     explicit TRUSDBWorker(DBPayload payload, QString connectionName = QStringLiteral("TRUS_DB"), QObject* parent = nullptr);
     void uploadPriceData(std::vector<PriceDataRow> rows);
+    void truncatePriceTable();
 
 public slots:
     void initialize();
@@ -23,6 +24,7 @@ public slots:
 signals:
     void initialized();
     void uploadCompleted(qsizetype rowCount);
+    void tableTruncated();
     void errorOccurred(const QString& error);
 
 private:

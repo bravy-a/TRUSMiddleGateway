@@ -264,29 +264,50 @@ int main(int argc, char* argv[])
         qWarning() << "(Sona) Database error:" << error;
     });
 
-
     // TRUS data feed not started until the KGI DB and SONA DB connection is established
 
     bool initialized {false};
     bool initializedSona {false};
+    bool truncated {false};
+    bool truncatedSona {false};
     bool feedStarted {false};
 
+
+    // Truncate function to KGI DB
+    const auto truncateTable = [](Qt::ConnectionType connectionType, TRUSDBWorker* dbWorker) {
+        QMetaObject::invokeMethod(dbWorker, [dbWorker]() mutable {
+            dbWorker->truncatePriceTable();
+        }, connectionType);
+    };
+
     const auto startFeedIfReady = [&] {
-        if (initialized && initializedSona && !feedStarted){
+        if (initialized && initializedSona && truncated && truncatedSona && !feedStarted){
             feedStarted = true;
             uploadTimer.start();
             telnet->connectToHost();
         }
     };
 
+    QObject::connect(dbWorker, &TRUSDBWorker::tableTruncated, &app, [&]() {
+        qInfo() << "Table Truncated.";
+        truncated = true;
+        startFeedIfReady();
+    });
+
+    QObject::connect(dbWorkerSona, &TRUSDBWorker::tableTruncated, &app, [&]() {
+        qInfo() << "(Sona) Table Truncated.";
+        truncatedSona = true;
+        startFeedIfReady();
+    });
+
     QObject::connect(dbWorker, &TRUSDBWorker::initialized, &app, [&] {
         initialized = true;
-        startFeedIfReady();
+        truncateTable(Qt::QueuedConnection, dbWorker);
     });
 
     QObject::connect(dbWorkerSona, &TRUSDBWorker::initialized, &app, [&] {
         initializedSona = true;
-        startFeedIfReady();
+        truncateTable(Qt::QueuedConnection, dbWorkerSona);
     });
 
     // Clean shutdown

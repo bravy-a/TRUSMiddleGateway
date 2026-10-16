@@ -46,6 +46,10 @@ constexpr QStringView PriceDataUpsertSql = uR"(
              s.[BBidIEP],s.[BBidIEV],s.[BOfferIEP],s.[BOfferIEV]);
 )";
 
+constexpr QStringView TruncatePriceTableSql = uR"(
+        TRUNCATE TABLE [ED].[dbo].[PRICE];
+)";
+
 qint32 toSqlInt(std::uint32_t value) {
     if (value > static_cast<std::uint32_t>(std::numeric_limits<qint32>::max()))
         throw std::overflow_error("Value exceeds SQL Server INT range.");
@@ -124,6 +128,24 @@ void TRUSDBWorker::uploadPriceData(std::vector<PriceDataRow> rows) {
         emit uploadCompleted(rowCount);
     }
     catch (const std::exception& e) {
+        emit errorOccurred(QString::fromUtf8(e.what()));
+    }
+}
+
+/* Because the table is a snapshot, truncate its data first at the start of the program to remove stale data.
+*/
+void TRUSDBWorker::truncatePriceTable() {
+    if (!m_db) {
+        emit errorOccurred(QStringLiteral("TRUS database is not initialized."));
+        return;
+    }
+
+    try {
+        m_db->exec(TruncatePriceTableSql);
+        emit tableTruncated();
+    }
+
+    catch(const std::exception& e) {
         emit errorOccurred(QString::fromUtf8(e.what()));
     }
 }
